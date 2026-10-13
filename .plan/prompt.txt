@@ -1,0 +1,76 @@
+now i want to implement a simple example about this aivo sdk so make sure to use ktor for networking and i want to build this flow i have one agent to manage 2 tools to get the weather conditions for any country i search about it so 
+tool 1:
+this tool to get the lat,lon for any contry by name.
+
+endpoint: https://freeopenapi.dev/api/v1/geography/countries?search="egypt"
+
+api key: foa_BW00Vz303vN5Fx9mIR3MrE4VZppHHvDS
+key header: X-Api-Key
+
+response is 
+{
+    "query": "egypt",
+    "countries": [
+        {
+            "name": "Egypt",
+            "officialName": "Arab Republic of Egypt",
+            "cca2": "EG",
+            "cca3": "EGY",
+            "capital": [
+                "Cairo"
+            ],
+            "region": "Africa",
+            "subregion": "Northern Africa",
+            "languages": [
+                "Arabic"
+            ],
+            "currencies": {
+                "EGP": "Egyptian pound"
+            },
+            "flagEmoji": "🇪🇬",
+            "flagUrl": "https://flagcdn.com/w320/eg.png",
+            "latLng": [
+                27,
+                30
+            ]
+        }
+    ]
+}
+
+
+tool 2:
+
+this tool to get the conditions for any country by lat , lon 
+
+endpoint: https://freeopenapi.dev/api/v1/weather/current?lat=27&lon=30
+
+api key: foa_BW00Vz303vN5Fx9mIR3MrE4VZppHHvDS
+key header: X-Api-Key
+
+response is  
+{
+    "latitude": 27,
+    "longitude": 30,
+    "timezone": "Africa/Cairo",
+    "current": {
+        "timestamp": "2026-10-12T14:30:00",
+        "temperatureC": 28.2,
+        "apparentTemperatureC": 26.8,
+        "windSpeedKmh": 15.8,
+        "windDirectionDeg": 348,
+        "precipitationMm": 0,
+        "weatherCode": 0,
+        "condition": "Clear sky",
+        "isDay": true
+    }
+}
+
+so i want to create this two tools and create a simple agent to manage this tools and the response when i ask about any country to give me the lat,lon and the conditions about this country so i want to create this agent a tools with a simple way 
+
+understand how to create this by aivo sdk from [linkedin-carousel.md](file;file:///d%3A/Projects/testsdk/.plan/linkedin-carousel.md) and 
+https://github.com/Abdallah-Elsobky/Aivo-SDK
+
+https://abdallah-elsobky.github.io/Aivo-SDK/
+
+so i want to create this in kmp project and make sure that it's work correctly with a simple mvi arch and simple code so i want this like a simple demo for this SDK so create a simple chat screen and the user can send messages to the agent and the agent understand for what country the user ask and then call the tool1 to get  the lat,lon and then call the tool 2 to get the weather condition by this lat,lon so handle this simple flow with aivo sdk so i want the code more readable and a professinoal simple arch so handle it.
+
