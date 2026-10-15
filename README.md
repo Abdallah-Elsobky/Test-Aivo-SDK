@@ -11,6 +11,8 @@ The demo features an autonomous **Weather Assistant Agent** that orchestrates mu
 
 ---
 
+</p><img width="1312" height="842" alt="Screenshot 2026-10-15 at 1 22 27 PM" src="https://github.com/user-attachments/assets/8ded2f01-0138-40ab-892c-05358d41d131" />
+
 ## 📌 Project Overview
 
 This application serves as an official reference implementation for integrating the **Aivo SDK** into modern cross-platform mobile apps.
@@ -76,11 +78,10 @@ To run and test this demo app, you must **generate your own personal API keys** 
 ### 1. FreeOpenAPI Weather API Key
 * **Service**: Powers the geography search and live weather forecast tools.
 * **Website**: [https://freeopenapi.dev/](https://freeopenapi.dev/)
-* **Documentation**: [API Documentation | FreeOpenAPI.dev](https://freeopenapi.dev/Docs)
 * **How to generate your key**:
-  1. Go to [https://freeopenapi.dev/](https://freeopenapi.dev/) and sign up for a free account.
-  2. Navigate to your dashboard and generate your personal API key (do **not** rely on shared demo keys, as they are rate-limited or disabled).
-  3. Copy your generated key and paste it into `local.properties` under `WEATHER_API_KEY`.
+1. Visit [Free Open API](https://freeopenapi.dev/) and enter your email address to request an API key.
+2. Check your inbox for the email containing your API key. If you can't find it, check your spam or junk folder.
+3. Copy the API key and add it to your `local.properties` file under the `WEATHER_API_KEY` property.
 
 ### 2. Ollama API Key
 * **Service**: Powers the autonomous LLM agent reasoning loop.
