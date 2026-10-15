@@ -31,8 +31,9 @@ abstract class GenerateBuildConfigTask : DefaultTask() {
             propFile.inputStream().use { props.load(it) }
         }
 
-        val weatherKey = props.getProperty("WEATHER_API_KEY") ?: ""
-        val ollamaKey = props.getProperty("OLLAMA_API_KEY") ?: ""
+        val weatherKey = props.getProperty("WEATHER_API_KEY")?.trim()?.removeSurrounding("\"")?.ifBlank { null }
+            ?: ""
+        val ollamaKey = props.getProperty("OLLAMA_API_KEY")?.trim()?.removeSurrounding("\"") ?: ""
 
         val dest = outputConfigFile.get().asFile
         dest.parentFile.mkdirs()

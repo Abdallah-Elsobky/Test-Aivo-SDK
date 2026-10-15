@@ -22,21 +22,30 @@ class ChatViewModel(
     private val _state = MutableStateFlow(ChatState())
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
-    private val conversationId = ConversationId("weather-agent-session")
+    private var sessionCounter = 0L
+    private var conversationId = ConversationId("weather-session-$sessionCounter")
     private var messageCounter = 0L
+
+    private val aivo = WeatherAgentFactory.create(
+        apiKey = ollamaApiKey,
+        service = weatherService,
+    )
 
     fun onIntent(intent: ChatIntent) {
         when (intent) {
             is ChatIntent.SendMessage -> sendMessage(intent.text)
             is ChatIntent.UpdateInput -> _state.update { it.copy(inputText = intent.text) }
             is ChatIntent.SelectSuggestion -> sendMessage(intent.prompt)
-            is ChatIntent.ClearChat -> _state.update {
-                it.copy(
-                    messages = emptyList(),
-                    currentStatus = null,
-                    activeToolName = null,
-                    error = null,
-                )
+            is ChatIntent.ClearChat -> {
+                conversationId = ConversationId("weather-session-${++sessionCounter}")
+                _state.update {
+                    it.copy(
+                        messages = emptyList(),
+                        currentStatus = null,
+                        activeToolName = null,
+                        error = null,
+                    )
+                }
             }
             is ChatIntent.DismissError -> _state.update { it.copy(error = null) }
         }
@@ -77,11 +86,6 @@ class ChatViewModel(
         viewModelScope.launch {
             var streamedAny = false
             try {
-                val aivo = WeatherAgentFactory.create(
-                    apiKey = ollamaApiKey,
-                    service = weatherService,
-                )
-
                 val agentMsgId = nextId("agent")
                 var initialAgentMessageAdded = false
                 val responseBuilder = StringBuilder()
