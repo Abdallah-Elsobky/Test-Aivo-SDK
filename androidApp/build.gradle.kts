@@ -1,3 +1,4 @@
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -19,6 +20,16 @@ dependencies {
     debugImplementation(libs.compose.uiTooling)
 }
 
+val localProps = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+val weatherApiKey: String = localProps.getProperty("WEATHER_API_KEY") ?: ""
+val ollamaApiKey: String = localProps.getProperty("OLLAMA_API_KEY") ?: ""
+
 android {
     namespace = "com.example.test_sdk"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -29,6 +40,9 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
+
+        buildConfigField("String", "WEATHER_API_KEY", "\"$weatherApiKey\"")
+        buildConfigField("String", "OLLAMA_API_KEY", "\"$ollamaApiKey\"")
     }
     packaging {
         resources {
@@ -50,5 +64,6 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }

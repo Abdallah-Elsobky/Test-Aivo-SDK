@@ -4,6 +4,7 @@ import com.example.test_sdk.data.model.CountryLocation
 import com.example.test_sdk.data.model.CountrySearchResponse
 import com.example.test_sdk.data.model.WeatherCurrentResponse
 import com.example.test_sdk.data.model.WeatherReport
+import com.example.test_sdk.config.BuildConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -22,7 +23,8 @@ class WeatherRemoteService(
 ) {
 
     companion object {
-        const val DEFAULT_API_KEY = "foa_BW00Vz303vN5Fx9mIR3MrE4VZppHHvDS"
+        val DEFAULT_API_KEY = BuildConfig.WEATHER_API_KEY
+
         private const val API_KEY_HEADER = "X-Api-Key"
         private const val COUNTRIES_URL = "https://freeopenapi.dev/api/v1/geography/countries"
         private const val WEATHER_URL = "https://freeopenapi.dev/api/v1/weather/current"

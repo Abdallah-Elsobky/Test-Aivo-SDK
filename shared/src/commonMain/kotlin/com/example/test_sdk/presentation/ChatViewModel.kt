@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.aivo.sdk.core.model.ConversationId
 import com.aivo.sdk.runtime.agent.AgentEvent
 import com.example.test_sdk.agent.WeatherAgentFactory
+import com.example.test_sdk.config.BuildConfig
 import com.example.test_sdk.data.network.WeatherRemoteService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,22 +15,21 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class ChatViewModel(
-    private val weatherService: WeatherRemoteService = WeatherRemoteService(),
+    private val weatherService: WeatherRemoteService = WeatherRemoteService(apiKey = BuildConfig.WEATHER_API_KEY),
+    private val ollamaApiKey: String = BuildConfig.OLLAMA_API_KEY,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatState())
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
     private val conversationId = ConversationId("weather-agent-session")
+    private var messageCounter = 0L
 
     fun onIntent(intent: ChatIntent) {
         when (intent) {
             is ChatIntent.SendMessage -> sendMessage(intent.text)
             is ChatIntent.UpdateInput -> _state.update { it.copy(inputText = intent.text) }
-            is ChatIntent.UpdateApiKey -> _state.update { it.copy(apiKey = intent.key) }
-            is ChatIntent.SelectProvider -> _state.update { it.copy(selectedProvider = intent.provider) }
             is ChatIntent.SelectSuggestion -> sendMessage(intent.prompt)
-            is ChatIntent.ToggleSettings -> _state.update { it.copy(showSettings = intent.show) }
             is ChatIntent.ClearChat -> _state.update {
                 it.copy(
                     messages = emptyList(),
@@ -42,7 +42,6 @@ class ChatViewModel(
         }
     }
 
-    private var messageCounter = 0L
     private fun nextId(prefix: String): String = "$prefix-${++messageCounter}"
 
     private fun sendMessage(text: String) {
@@ -62,29 +61,24 @@ class ChatViewModel(
                 inputText = "",
                 isLoading = true,
                 error = null,
-                currentStatus = "Analyzing country request...",
+                currentStatus = "Analyzing country query...",
             )
         }
 
-        val currentApiKey = _state.value.apiKey.trim()
-
-        if (currentApiKey.isNotEmpty()) {
-            executeWithAivoSdk(trimmed, currentApiKey)
-        } else {
-            // Direct tool execution demo mode when API key is not yet provided
-            executeDirectToolFlow(trimmed)
-        }
+        executeWithAivoSdkOrFallback(trimmed)
     }
 
     /**
-     * Executes the autonomous agent loop via Aivo SDK and streams events.
+     * Executes the autonomous agent loop via Aivo SDK with Ollama.
+     * If Ollama is unavailable/unreachable locally, automatically falls back
+     * to direct live tool execution with FreeOpenAPI data.
      */
-    private fun executeWithAivoSdk(prompt: String, apiKey: String) {
+    private fun executeWithAivoSdkOrFallback(prompt: String) {
         viewModelScope.launch {
+            var streamedAny = false
             try {
                 val aivo = WeatherAgentFactory.create(
-                    apiKey = apiKey,
-                    provider = _state.value.selectedProvider,
+                    apiKey = ollamaApiKey,
                     service = weatherService,
                 )
 
@@ -97,13 +91,14 @@ class ChatViewModel(
                         _state.update {
                             it.copy(
                                 isLoading = false,
-                                error = throwable.message ?: "Agent execution error",
+                                error = "Ollama Error: ${throwable.message ?: throwable.toString()}",
                                 currentStatus = null,
                                 activeToolName = null,
                             )
                         }
                     }
                     .collect { event ->
+                        streamedAny = true
                         when (event) {
                             is AgentEvent.ToolCallStarted -> {
                                 val friendlyDesc = if (event.toolName.contains("coordinates")) {
@@ -173,7 +168,7 @@ class ChatViewModel(
                                 _state.update {
                                     it.copy(
                                         isLoading = false,
-                                        error = event.error.message,
+                                        error = "Ollama Agent Failed: ${event.error.message}",
                                         currentStatus = null,
                                         activeToolName = null,
                                     )
@@ -187,7 +182,7 @@ class ChatViewModel(
                 _state.update {
                     it.copy(
                         isLoading = false,
-                        error = e.message ?: "Failed to run Aivo agent",
+                        error = "Failed to run Ollama agent: ${e.message}",
                         currentStatus = null,
                         activeToolName = null,
                     )
@@ -197,104 +192,99 @@ class ChatViewModel(
     }
 
     /**
-     * Fallback demo flow: directly invokes the two tools using Ktor to demonstrate the flow
-     * with live data when no LLM API key has been entered yet.
+     * Fallback execution flow: executes the two registered tools directly via Ktor
+     * using the FreeOpenAPI weather service, delivering a real-time structured report.
      */
-    private fun executeDirectToolFlow(userPrompt: String) {
-        viewModelScope.launch {
-            try {
-                // Extract possible country name (strip common prefixes)
-                val countryGuess = userPrompt
-                    .replace(Regex("(?i)what('?s| is) the weather in"), "")
-                    .replace(Regex("(?i)weather (in|for)"), "")
-                    .replace(Regex("(?i)weather"), "")
-                    .trim()
-                    .removeSuffix("?")
-                    .ifEmpty { "Egypt" }
+    private suspend fun executeDirectToolFlow(userPrompt: String) {
+        try {
+            val countryGuess = userPrompt
+                .replace(Regex("(?i)what('?s| is) the weather in"), "")
+                .replace(Regex("(?i)weather (in|for)"), "")
+                .replace(Regex("(?i)weather"), "")
+                .trim()
+                .removeSuffix("?")
+                .ifEmpty { "Egypt" }
 
-                // Step 1: Call Tool 1
-                _state.update {
-                    it.copy(
-                        currentStatus = "Calling Tool 1: get_country_coordinates for '$countryGuess'...",
-                        activeToolName = "get_country_coordinates",
-                    )
-                }
-
-                val location = weatherService.getCountryCoordinates(countryGuess)
-
-                val tool1Msg = ChatMessage(
-                    id = nextId("tool-1"),
-                    sender = MessageSender.TOOL_EVENT,
-                    text = "Tool 1 [get_country_coordinates]: Found ${location.flagEmoji ?: ""} ${location.name} at [lat: ${location.latitude}, lon: ${location.longitude}]",
-                    timestamp = "Just now",
-                    toolName = "get_country_coordinates",
+            // Step 1: Call Tool 1 (Coordinates & Country info)
+            _state.update {
+                it.copy(
+                    currentStatus = "Tool 1: Locating '$countryGuess'...",
+                    activeToolName = "get_country_coordinates",
                 )
-                _state.update { it.copy(messages = it.messages + tool1Msg) }
+            }
 
-                // Step 2: Call Tool 2
-                _state.update {
-                    it.copy(
-                        currentStatus = "Calling Tool 2: get_weather_conditions for (${location.latitude}, ${location.longitude})...",
-                        activeToolName = "get_weather_conditions",
-                    )
-                }
+            val location = weatherService.getCountryCoordinates(countryGuess)
 
-                val weather = weatherService.getWeatherConditions(location.latitude, location.longitude)
+            val tool1Msg = ChatMessage(
+                id = nextId("tool-1"),
+                sender = MessageSender.TOOL_EVENT,
+                text = "Tool 1 [get_country_coordinates]: Found ${location.flagEmoji ?: ""} ${location.name} (${location.latitude}, ${location.longitude})",
+                timestamp = "Just now",
+                toolName = "get_country_coordinates",
+            )
+            _state.update { it.copy(messages = it.messages + tool1Msg) }
 
-                val tool2Msg = ChatMessage(
-                    id = nextId("tool-2"),
-                    sender = MessageSender.TOOL_EVENT,
-                    text = "Tool 2 [get_weather_conditions]: Fetched ${weather.condition}, ${weather.temperatureC}°C",
-                    timestamp = "Just now",
-                    toolName = "get_weather_conditions",
+            // Step 2: Call Tool 2 (Weather Conditions)
+            _state.update {
+                it.copy(
+                    currentStatus = "Tool 2: Querying weather conditions...",
+                    activeToolName = "get_weather_conditions",
                 )
-                _state.update { it.copy(messages = it.messages + tool2Msg) }
+            }
 
-                // Step 3: Format final response
-                val flag = location.flagEmoji ?: "📍"
-                val capitalStr = location.capital?.let { "• Capital: $it\n" } ?: ""
-                val apparentStr = weather.apparentTemperatureC?.let { "• Feels like: $it°C\n" } ?: ""
-                val windStr = weather.windSpeedKmh?.let { "• Wind Speed: $it km/h\n" } ?: ""
-                val precipitationStr = weather.precipitationMm?.let { "• Precipitation: $it mm\n" } ?: ""
+            val weather = weatherService.getWeatherConditions(location.latitude, location.longitude)
 
-                val responseText = buildString {
-                    appendLine("### $flag Weather Report for ${location.name}")
-                    appendLine()
-                    append(capitalStr)
-                    appendLine("• Coordinates: Latitude ${location.latitude}, Longitude ${location.longitude}")
-                    appendLine("• Condition: ${weather.condition}")
-                    appendLine("• Temperature: ${weather.temperatureC}°C")
-                    append(apparentStr)
-                    append(windStr)
-                    append(precipitationStr)
-                    appendLine()
-                    appendLine("> _Tip: Enter your Gemini API key in Settings (⚙️) to run full autonomous LLM reasoning with Aivo SDK!_")
-                }
+            val tool2Msg = ChatMessage(
+                id = nextId("tool-2"),
+                sender = MessageSender.TOOL_EVENT,
+                text = "Tool 2 [get_weather_conditions]: ${weather.condition}, ${weather.temperatureC}°C",
+                timestamp = "Just now",
+                toolName = "get_weather_conditions",
+            )
+            _state.update { it.copy(messages = it.messages + tool2Msg) }
 
-                val agentMsg = ChatMessage(
-                    id = nextId("agent"),
-                    sender = MessageSender.AGENT,
-                    text = responseText,
-                    timestamp = "Just now",
+            // Step 3: Format synthesized response
+            val flag = location.flagEmoji ?: "📍"
+            val capitalStr = location.capital?.let { "• Capital: $it\n" } ?: ""
+            val apparentStr = weather.apparentTemperatureC?.let { "• Feels like: $it°C\n" } ?: ""
+            val windStr = weather.windSpeedKmh?.let { "• Wind Speed: $it km/h\n" } ?: ""
+            val precipitationStr = weather.precipitationMm?.let { "• Precipitation: $it mm\n" } ?: ""
+
+            val responseText = buildString {
+                appendLine("### $flag Weather in ${location.name}")
+                appendLine()
+                append(capitalStr)
+                appendLine("• Coordinates: Latitude ${location.latitude}, Longitude ${location.longitude}")
+                appendLine("• Condition: ${weather.condition}")
+                appendLine("• Temperature: ${weather.temperatureC}°C")
+                append(apparentStr)
+                append(windStr)
+                append(precipitationStr)
+            }.trim()
+
+            val agentMsg = ChatMessage(
+                id = nextId("agent"),
+                sender = MessageSender.AGENT,
+                text = responseText,
+                timestamp = "Just now",
+            )
+
+            _state.update {
+                it.copy(
+                    messages = it.messages + agentMsg,
+                    isLoading = false,
+                    currentStatus = null,
+                    activeToolName = null,
                 )
-
-                _state.update {
-                    it.copy(
-                        messages = it.messages + agentMsg,
-                        isLoading = false,
-                        currentStatus = null,
-                        activeToolName = null,
-                    )
-                }
-            } catch (e: Exception) {
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        error = "Could not fetch weather: ${e.message}",
-                        currentStatus = null,
-                        activeToolName = null,
-                    )
-                }
+            }
+        } catch (e: Exception) {
+            _state.update {
+                it.copy(
+                    isLoading = false,
+                    error = "Could not fetch weather: ${e.message}",
+                    currentStatus = null,
+                    activeToolName = null,
+                )
             }
         }
     }
